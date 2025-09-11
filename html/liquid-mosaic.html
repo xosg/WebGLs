@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Liquid Mosaic WebGL</title>
+  <style>
+    html, body { height: 100%; width: 100%; margin: 0; padding: 0; background: #181c20; }
+    body { width: 100vw; height: 100vh; margin: 0; padding: 0; overflow: hidden; }
+    canvas { background: #181c20; display: block; width: 100vw; height: 100vh; }
+  </style>
+</head>
+<body>
+<canvas id="glcanvas"></canvas>
+<script id="frag" type="x-shader/x-fragment">
+precision highp float;
+uniform float u_time;
+uniform vec2 u_res;
+#define N 32
+// Hash for pseudo-random
+float hash(float n) { return fract(sin(n)*43758.5453); }
+// HSL to RGB
+vec3 hsl2rgb(vec3 c) {
+  vec3 rgb = clamp(abs(mod(c.x*6.0+vec3(0,4,2),6.0)-3.0)-1.0,0.0,1.0);
+  return c.z + c.y*(rgb-0.5)*(1.0-abs(2.0*c.z-1.0));
+}
+void main() {
+  vec2 uv = gl_FragCoord.xy;
+  float minD = 1e9, minD2 = 1e9;
+  vec3 col1 = vec3(0.0), col2 = vec3(0.0);
+  for(int i=0; i<N; i++) {
+    float fi = float(i);
+    float a = hash(fi+1.0)*6.2831;
+    float r = 0.32+0.38*hash(fi+2.0);
+    float px = 0.5 + r*cos(a+u_time*0.18+fi*0.13+sin(u_time*0.11+fi*0.07));
+    float py = 0.5 + r*sin(a+u_time*0.18+fi*0.13+cos(u_time*0.13+fi*0.09));
+    vec2 pt = vec2(px,py)*u_res;
+    float hue = mod(fi*360.0/float(N)+u_time*18.0,360.0)/360.0;
+    float sat = 0.7+0.3*sin(fi*0.2);
+    float light = 0.55+0.15*cos(fi*0.3);
+    vec3 color = hsl2rgb(vec3(hue,sat,light));
+    float d = distance(uv, pt);
+    if(d < minD) {
+      minD2 = minD;
+      col2 = col1;
+      minD = d;
+      col1 = color;
+    } else if(d < minD2) {
+      minD2 = d;
+      col2 = color;
+    }
+  }
+  float blend = clamp((minD2-minD)/(minD2+minD+1e-6),0.0,1.0);
+  vec3 col = mix(col1, col2, blend);
+  // Subtle glow
+  float glow = exp(-minD*0.012);
+  col = mix(col, vec3(1.0), glow*0.13);
+  gl_FragColor = vec4(col,1.0);
+}
+</script>
+<script id="vert" type="x-shader/x-vertex">
+attribute vec2 a_pos;
+void main() {
+  gl_Position = vec4(a_pos,0,1);
+}
+</script>
+<script>
+const canvas = document.getElementById('glcanvas');
+let gl = canvas.getContext('webgl');
+function resize() {
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+  gl.viewport(0,0,canvas.width,canvas.height);
+}
+window.addEventListener('resize', resize);
+resize();
+function compile(gl, src, type) {
+  let s = gl.createShader(type);
+  gl.shaderSource(s, src);
+  gl.compileShader(s);
+  if(!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw gl.getShaderInfoLog(s);
+  return s;
+}
+function createProgram(gl, vs, fs) {
+  let p = gl.createProgram();
+  gl.attachShader(p, vs);
+  gl.attachShader(p, fs);
+  gl.linkProgram(p);
+  if(!gl.getProgramParameter(p, gl.LINK_STATUS)) throw gl.getProgramInfoLog(p);
+  return p;
+}
+const vertSrc = document.getElementById('vert').textContent;
+const fragSrc = document.getElementById('frag').textContent;
+const vs = compile(gl, vertSrc, gl.VERTEX_SHADER);
+const fs = compile(gl, fragSrc, gl.FRAGMENT_SHADER);
+const prog = createProgram(gl, vs, fs);
+gl.useProgram(prog);
+// Fullscreen quad
+const buf = gl.createBuffer();
+gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
+  -1,-1, 1,-1, -1,1, 1,1
+]), gl.STATIC_DRAW);
+const loc = gl.getAttribLocation(prog, 'a_pos');
+gl.enableVertexAttribArray(loc);
+gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
+// Uniforms
+const u_time = gl.getUniformLocation(prog, 'u_time');
+const u_res = gl.getUniformLocation(prog, 'u_res');
+function render() {
+  gl.uniform1f(u_time, performance.now()*0.001);
+  gl.uniform2f(u_res, canvas.width, canvas.height);
+  gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+  requestAnimationFrame(render);
+}
+render();
+</script>
+</body>
+</html>
