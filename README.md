@@ -7,7 +7,7 @@
 - each .html file named with a semantic name 
 - without any 3rd party libraries
 - without any external js or css or image files.
-- .html file should be less than 200 lines.
+- .html file should be less than 200 lines.(for performance purpose)
 - the shader code in each file shoule be less than 100 lines. so mobile platform could render it smoothly.
 - every animation should be periodic with a period less than 15s. so no precision problem during long period.
 - the first frame and the last frame of the period should be identical so that the animation is smooth forever. so this relies on the periodic function(e.g. the simplest sin/cos)
