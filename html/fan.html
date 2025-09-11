@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Shadertoy WcffDN (port harness) — 12s</title>
+  <style>html,body{height:100%;margin:0;background:#0a0c10}canvas{display:block;width:100%;height:100%}</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+
+<script id="vs" type="x-shader/x-vertex">attribute vec2 aPos; varying vec2 vUv; void main(){ vUv=aPos*0.5+0.5; gl_Position=vec4(aPos,0.0,1.0);} </script>
+
+<script id="fs" type="x-shader/x-fragment">
+precision mediump float; varying vec2 vUv; uniform vec2 uRes; uniform float uTime; uniform float uPhase; const float TAU=6.2831853; const float PERIOD=12.0;
+
+// Shadertoy compatibility layer (faithful iTime; uPhase left for optional looping experiments)
+#define iResolution vec3(uRes, 0.0)
+#define iTime (uTime)
+
+// PASTE your Shadertoy mainImage body inside the function below.
+// Keep the signature and write to fragColor.
+void mainImage(out vec4 fragColor, in vec2 fragCoord){
+  // Example placeholder (remove when pasting the target shader):
+  vec2 R = iResolution.xy;
+  vec2 uv = (fragCoord - 0.5*R)/min(R.x,R.y);
+  float t = iTime;
+  float r = length(uv);
+  float a = atan(uv.y,uv.x);
+  float bands = 0.5 + 0.5*cos(8.0*r - 3.0*a + TAU*0.3*t);
+  vec3 base = mix(vec3(0.05,0.08,0.12), vec3(0.10,0.95,1.0), bands);
+  fragColor = vec4(base,1.0);
+}
+
+void main(){ vec4 col; mainImage(col, vUv*uRes); gl_FragColor = col; }
+</script>
+
+<script>
+function createShader(gl, src, type){ const s=gl.createShader(type); gl.shaderSource(s,src); gl.compileShader(s); if(!gl.getShaderParameter(s,gl.COMPILE_STATUS)){ console.error(gl.getShaderInfoLog(s)); gl.deleteShader(s); return null;} return s; }
+function createProgram(gl, vsSrc, fsSrc){ const vs=createShader(gl,vsSrc,gl.VERTEX_SHADER); const fs=createShader(gl,fsSrc,gl.FRAGMENT_SHADER); if(!vs||!fs) return null; const p=gl.createProgram(); gl.attachShader(p,vs); gl.attachShader(p,fs); gl.bindAttribLocation(p,0,'aPos'); gl.linkProgram(p); if(!gl.getProgramParameter(p,gl.LINK_STATUS)){ console.error(gl.getProgramInfoLog(p)); return null;} return p; }
+const canvas=document.getElementById('c'); const gl=canvas.getContext('webgl',{antialias:true}); if(!gl) throw new Error('WebGL not supported');
+const prog=createProgram(gl,document.getElementById('vs').textContent,document.getElementById('fs').textContent); const uRes=gl.getUniformLocation(prog,'uRes'); const uTime=gl.getUniformLocation(prog,'uTime'); const uPhase=gl.getUniformLocation(prog,'uPhase');
+const vb=gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER,vb); gl.bufferData(gl.ARRAY_BUFFER,new Float32Array([-1,-1, 1,-1, -1,1, 1,1]),gl.STATIC_DRAW);
+let __fi_buffer=[]; const FI_MAX=16; function pushDt(dt){ __fi_buffer.push(dt); if(__fi_buffer.length>FI_MAX) __fi_buffer.shift(); }
+function autoScale(){ if(__fi_buffer.length<6) return 1.0; const a=__fi_buffer.slice().sort((x,y)=>x-y); const med=a[Math.floor(a.length/2)]; const fps=1.0/med; const target=50; let s=fps/target; return Math.max(0.5, Math.min(1.0, s)); }
+const MIN_DT=1/140, PERIOD=12.0;
+function resizeCanvas(scale){ const dpr=Math.max(1,Math.min(window.devicePixelRatio||1,scale)); const w=Math.floor(window.innerWidth*dpr+0.5), h=Math.floor(window.innerHeight*dpr+0.5); if(canvas.width!==w||canvas.height!==h){ canvas.width=w; canvas.height=h; canvas.style.width=window.innerWidth+'px'; canvas.style.height=window.innerHeight+'px'; gl.viewport(0,0,w,h);} }
+let last=performance.now(), start=last;
+function frame(now){ now=performance.now(); let dt=(now-last)/1000; if(dt<MIN_DT){ requestAnimationFrame(frame); return;} last=now; pushDt(dt);
+  const s=autoScale(); const dprCap=Math.max(1,Math.min(window.devicePixelRatio||1,1.0)); resizeCanvas(Math.min(dprCap,s));
+  gl.useProgram(prog); gl.bindBuffer(gl.ARRAY_BUFFER,vb); gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0,2,gl.FLOAT,false,0,0);
+  gl.uniform2f(uRes,canvas.width,canvas.height);
+  const t=(now-start)/1000.0; // seconds since load
+  gl.uniform1f(uTime,t);
+  gl.uniform1f(uPhase,(t%PERIOD)/PERIOD); // still exposed if you want a looped phase
+  gl.drawArrays(gl.TRIANGLE_STRIP,0,4); requestAnimationFrame(frame);
+}
+window.addEventListener('resize',()=>resizeCanvas(autoScale())); resizeCanvas(1.0); requestAnimationFrame(()=>{ last=performance.now(); start=last; requestAnimationFrame(frame);});
+</script>
+
+</body>
+</html>
