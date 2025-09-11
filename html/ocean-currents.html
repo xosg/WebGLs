@@ -87,7 +87,6 @@ let __fi_buffer=[]; const FI_MAX=16; function pushDt(dt){ __fi_buffer.push(dt); 
 function autoScale(){ if(__fi_buffer.length<6) return 1.0; const a=__fi_buffer.slice().sort((x,y)=>x-y); const med=a[Math.floor(a.length/2)]; const fps=1.0/med; const target=50; let s=fps/target; return Math.max(0.5, Math.min(1.0, s)); }
 const MIN_DT = 1/140; // pacing guard
 const PERIOD = 10.0;  // adhere to 10–15s rule
-const LOOP_STEPS = 600; // quantize to 600 steps per loop
 
 function resizeCanvas(scale){ const dpr = Math.max(1, Math.min(window.devicePixelRatio||1, scale)); const w=Math.floor(window.innerWidth*dpr+0.5), h=Math.floor(window.innerHeight*dpr+0.5); if(canvas.width!==w||canvas.height!==h){ canvas.width=w; canvas.height=h; canvas.style.width=window.innerWidth+'px'; canvas.style.height=window.innerHeight+'px'; gl.viewport(0,0,w,h);} }
 
@@ -99,9 +98,7 @@ function frame(now){ now=performance.now(); let dt=(now-last)/1000; if(dt<MIN_DT
   gl.bindBuffer(gl.ARRAY_BUFFER, vb); gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0,2,gl.FLOAT,false,0,0);
   gl.uniform2f(uRes, w, h);
   const t=(now-start)/1000.0;
-  const loopT = t % PERIOD;
-  let phase = Math.round((loopT / PERIOD) * LOOP_STEPS) / LOOP_STEPS;
-  if(phase>=1.0) phase = 0.0;
+  const phase = (t % PERIOD) / PERIOD; // forward-only periodic phase [0,1)
   gl.uniform1f(uPhase, phase);
   gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
   requestAnimationFrame(frame);
