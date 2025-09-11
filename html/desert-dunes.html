@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Desert Dunes</title>
+  <style>
+    html,body{height:100%;margin:0;background:#0a0b0d}
+    canvas{display:block;width:100%;height:100%}
+  </style>
+</head>
+<body>
+<canvas id="c"></canvas>
+
+<script id="vs" type="x-shader/x-vertex">attribute vec2 aPos; varying vec2 vUv; void main(){ vUv=aPos*0.5+0.5; gl_Position=vec4(aPos,0.0,1.0);} </script>
+
+<script id="fs" type="x-shader/x-fragment">
+precision mediump float;
+varying vec2 vUv;
+uniform vec2 uRes;
+uniform float uPhase;
+
+void main(){
+  const float TAU = 6.2831853;
+  // square-normalized coords, x right, y up
+  vec2 p = (vUv*uRes - 0.5*uRes)/min(uRes.x,uRes.y);
+
+  // subtle shimmer/wind: small x offset varying with y
+  p.x += 0.03 * sin(TAU*(0.15*p.y - 3.0*uPhase));
+
+  // dune height field from two wave directions (integer temporal multipliers)
+  float wave1 = sin(TAU*(0.45*p.x - 1.0*uPhase));
+  float wave2 = sin(TAU*(0.18*(p.x*0.7 + p.y*0.25) - 2.0*uPhase) + 1.1);
+  float h = p.y*0.8 + 0.35*wave1 + 0.20*wave2;
+
+  // banding creates ripples
+  float bands = 0.5 + 0.5*sin(TAU*(3.0*h));
+  bands = pow(bands, 1.4);
+
+  // approximate slope for shading (no extra texture lookups)
+  float dhdx = 0.35*(0.45*TAU)*cos(TAU*(0.45*p.x - 1.0*uPhase))
+             + 0.20*(0.18*0.7*TAU)*cos(TAU*(0.18*(p.x*0.7 + p.y*0.25) - 2.0*uPhase) + 1.1);
+  float shade = clamp(0.55 - 0.25*dhdx, 0.0, 1.0);
+
+  // desert palette: shadow → sand → sunlit
+  vec3 cShadow = vec3(0.18,0.12,0.09);
+  vec3 cSand   = vec3(0.85,0.74,0.56);
+  vec3 cSun    = vec3(1.00,0.92,0.72);
+  vec3 col = mix(cShadow, cSand, bands);
+  col = mix(col, cSun, smoothstep(0.75, 1.0, bands))*shade;
+
+  // sky gradient toward the top
+  float skyT = smoothstep(0.2, 0.75, p.y);
+  vec3 skyCol = mix(vec3(0.36,0.48,0.68), vec3(0.06,0.10,0.20), smoothstep(0.2, 0.95, p.y));
+  col = mix(col, skyCol, skyT*0.9);
+
+  // sun glow near top center
+  vec2 sunPos = vec2(0.0, 0.58);
+  float sun = smoothstep(0.22, 0.0, length(p - sunPos));
+  col += sun * vec3(1.2,1.05,0.85) * 0.35;
+
+  // vignette
+  float r = length(p*vec2(1.0,0.8));
+  col *= mix(0.85, 1.0, smoothstep(1.1, 0.2, r));
+
+  gl_FragColor = vec4(clamp(col,0.0,1.0), 1.0);
+}
+</script>
+
+<script>
+// Minimal helpers
+function createShader(gl, src, type){ const s=gl.createShader(type); gl.shaderSource(s,src); gl.compileShader(s); if(!gl.getShaderParameter(s,gl.COMPILE_STATUS)){ console.error(gl.getShaderInfoLog(s)); gl.deleteShader(s); return null;} return s; }
+function createProgram(gl, vsSrc, fsSrc){ const vs=createShader(gl,vsSrc,gl.VERTEX_SHADER); const fs=createShader(gl,fsSrc,gl.FRAGMENT_SHADER); if(!vs||!fs) return null; const p=gl.createProgram(); gl.attachShader(p,vs); gl.attachShader(p,fs); gl.bindAttribLocation(p,0,'aPos'); gl.linkProgram(p); if(!gl.getProgramParameter(p,gl.LINK_STATUS)){ console.error(gl.getProgramInfoLog(p)); return null;} return p; }
+
+const canvas = document.getElementById('c');
+const gl = canvas.getContext('webgl', {antialias:true});
+if(!gl) throw new Error('WebGL not supported');
+
+const prog = createProgram(gl, document.getElementById('vs').textContent, document.getElementById('fs').textContent);
+const uRes = gl.getUniformLocation(prog,'uRes');
+const uPhase = gl.getUniformLocation(prog,'uPhase');
+
+// fullscreen quad
+const vb = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, vb); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 1,-1, -1,1, 1,1]), gl.STATIC_DRAW);
+
+// adaptive scaler
+let __fi_buffer=[]; const FI_MAX=16; function pushDt(dt){ __fi_buffer.push(dt); if(__fi_buffer.length>FI_MAX) __fi_buffer.shift(); }
+function autoScale(){ if(__fi_buffer.length<6) return 1.0; const a=__fi_buffer.slice().sort((x,y)=>x-y); const med=a[Math.floor(a.length/2)]; const fps=1.0/med; const target=50; let s=fps/target; return Math.max(0.5, Math.min(1.0, s)); }
+const MIN_DT = 1/140; // pacing guard
+const PERIOD = 12.0;  // ~10s, not exceeding 15s
+
+function resizeCanvas(scale){ const dpr = Math.max(1, Math.min(window.devicePixelRatio||1, scale)); const w=Math.floor(window.innerWidth*dpr+0.5), h=Math.floor(window.innerHeight*dpr+0.5); if(canvas.width!==w||canvas.height!==h){ canvas.width=w; canvas.height=h; canvas.style.width=window.innerWidth+'px'; canvas.style.height=window.innerHeight+'px'; gl.viewport(0,0,w,h);} }
+
+let last=performance.now(), start=last;
+function frame(now){ now=performance.now(); let dt=(now-last)/1000; if(dt<MIN_DT){ requestAnimationFrame(frame); return; } last=now; pushDt(dt);
+  const s=autoScale(); const dprCap=Math.max(1, Math.min(window.devicePixelRatio||1, 1.0)); const scale=Math.min(dprCap, s); resizeCanvas(scale);
+  const w=canvas.width, h=canvas.height;
+  gl.useProgram(prog);
+  gl.bindBuffer(gl.ARRAY_BUFFER, vb); gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0,2,gl.FLOAT,false,0,0);
+  gl.uniform2f(uRes, w, h);
+  const t=(now-start)/1000.0; const phase=(t/PERIOD)%1.0; gl.uniform1f(uPhase, phase);
+  gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+  requestAnimationFrame(frame);
+}
+
+window.addEventListener('resize', ()=>resizeCanvas(autoScale()));
+resizeCanvas(1.0);
+requestAnimationFrame(()=>{ last=performance.now(); start=last; requestAnimationFrame(frame); });
+</script>
+
+</body>
+</html>
