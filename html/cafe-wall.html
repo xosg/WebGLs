@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Café Wall Illusion</title>
+  <style>
+    html, body { margin: 0; height: 100%; background: #e9e9e9; }
+    canvas { display: block; width: 100vw; height: 100vh; }
+  </style>
+</head>
+<body>
+  <canvas id="cafewall"></canvas>
+
+  <script type="x-shader/x-vertex" id="vs">
+    attribute vec3 position;
+    attribute vec2 uv;
+    varying vec2 vUv;
+    void main(){
+      vUv = uv;
+      gl_Position = vec4(position, 1.0);
+    }
+  </script>
+
+  <script type="x-shader/x-fragment" id="fs">
+    precision mediump float;
+
+    varying vec2 vUv;
+  uniform vec2 resolution;
+  uniform float time;
+  uniform float speed;
+
+    // Antialiased step (no derivatives): x is in pixel units
+    float aastep(float edge, float x){
+      // Smooth across ~1 device pixel in our pixel space
+      float w = 1.0;
+      return smoothstep(edge - w, edge + w, x);
+    }
+
+    void main(){
+      // Work in pixel space for crisp lines
+      vec2 px = vUv * resolution;
+
+  // Tile size in pixels (width, height)
+  vec2 cell = vec2(64.0, 32.0);
+  // Animate mortar a little per row for a living illusion
+  float row = floor(px.y / cell.y);
+  float mortarBase = 5.0; // horizontal separator thickness in px
+  float mortar = clamp(mortarBase + 1.2 * sin(time * 1.6 * speed + row * 0.7), 2.0, 8.0);
+
+  // Row index and horizontal offset for alternate rows
+  // Add a tiny animated wobble to the half-tile shift to suggest motion
+  float rowShiftBase = mod(row, 2.0) * 0.5; // half-tile shift on odd rows
+  float rowShift = rowShiftBase + 0.08 * sin(time * 1.2 * speed + row * 0.8);
+
+      // Column index after applying row shift
+      float col = floor(px.x / cell.x + rowShift);
+
+      // Determine base tile color (near-black vs near-white for softer look)
+      float parity = mod(col, 2.0);
+      vec3 tileA = vec3(0.06);
+      vec3 tileB = vec3(0.94);
+      vec3 tileColor = mix(tileA, tileB, step(0.5, parity));
+
+      // Mortar horizontal band (thin grey lines between rows)
+  float yInCell = mod(px.y, cell.y);
+      float topBand = 1.0 - aastep(mortar, yInCell);      // near top edge of cell
+      float botBand = aastep(cell.y - mortar, yInCell);    // near bottom edge of cell
+      float mortMask = clamp(topBand + botBand, 0.0, 1.0);
+
+      vec3 mortColor = vec3(0.60);
+      vec3 colOut = mix(tileColor, mortColor, mortMask);
+
+      gl_FragColor = vec4(colOut, 1.0);
+    }
+  </script>
+
+  <script>
+    const canvas = document.getElementById('cafewall');
+    const gl = canvas.getContext('webgl');
+    if(!gl){ alert('WebGL not supported'); throw new Error('WebGL not supported'); }
+
+    function createShader(type, source){
+      const sh = gl.createShader(type);
+      gl.shaderSource(sh, source);
+      gl.compileShader(sh);
+      if(!gl.getShaderParameter(sh, gl.COMPILE_STATUS)){
+        console.error(gl.getShaderInfoLog(sh));
+        throw new Error('Shader compile failed');
+      }
+      return sh;
+    }
+
+    const vs = createShader(gl.VERTEX_SHADER, document.getElementById('vs').textContent);
+    const fs = createShader(gl.FRAGMENT_SHADER, document.getElementById('fs').textContent);
+
+    const program = gl.createProgram();
+    gl.attachShader(program, vs);
+    gl.attachShader(program, fs);
+    gl.linkProgram(program);
+    if(!gl.getProgramParameter(program, gl.LINK_STATUS)){
+      console.error(gl.getProgramInfoLog(program));
+      throw new Error('Program link failed');
+    }
+
+    const positions = new Float32Array([
+      -1, -1, 0,
+       1, -1, 0,
+      -1,  1, 0,
+       1,  1, 0,
+    ]);
+    const uvs = new Float32Array([
+      0, 0,
+      1, 0,
+      0, 1,
+      1, 1,
+    ]);
+
+    const posBuf = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, posBuf);
+    gl.bufferData(gl.ARRAY_BUFFER, positions, gl.STATIC_DRAW);
+
+    const uvBuf = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, uvBuf);
+    gl.bufferData(gl.ARRAY_BUFFER, uvs, gl.STATIC_DRAW);
+
+    const aPos = gl.getAttribLocation(program, 'position');
+    const aUv  = gl.getAttribLocation(program, 'uv');
+
+  const uRes  = gl.getUniformLocation(program, 'resolution');
+  const uTime = gl.getUniformLocation(program, 'time');
+  const uSpeed= gl.getUniformLocation(program, 'speed');
+
+    function resize(){
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      const w = Math.floor(window.innerWidth * dpr);
+      const h = Math.floor(window.innerHeight * dpr);
+      canvas.width = w; canvas.height = h;
+      canvas.style.width = window.innerWidth + 'px';
+      canvas.style.height = window.innerHeight + 'px';
+      gl.viewport(0, 0, w, h);
+    }
+    window.addEventListener('resize', resize);
+    resize();
+
+    let start = performance.now();
+    function render(now){
+      const t = (now - start) * 0.001;
+      gl.clearColor(0.9137, 0.9137, 0.9137, 1.0); // #e9e9e9 background
+      gl.clear(gl.COLOR_BUFFER_BIT);
+
+      gl.useProgram(program);
+      gl.uniform2f(uRes, canvas.width, canvas.height);
+  gl.uniform1f(uTime, t);
+  gl.uniform1f(uSpeed, 5.0); // speed multiplier
+
+      gl.bindBuffer(gl.ARRAY_BUFFER, posBuf);
+      gl.enableVertexAttribArray(aPos);
+      gl.vertexAttribPointer(aPos, 3, gl.FLOAT, false, 0, 0);
+
+      gl.bindBuffer(gl.ARRAY_BUFFER, uvBuf);
+      gl.enableVertexAttribArray(aUv);
+      gl.vertexAttribPointer(aUv, 2, gl.FLOAT, false, 0, 0);
+
+      gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+      requestAnimationFrame(render);
+    }
+    requestAnimationFrame(render);
+  </script>
+</body>
+</html>
