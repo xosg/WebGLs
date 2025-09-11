@@ -65,11 +65,10 @@
       p.x *= resolution.x / resolution.y;
 
       // Vector field angle using animated noise and sines
-      float n = 0.0;
+    float n = 0.0;
   float tw = mod(time, 628.3185307);
-  n += noise(p*2.0 + tw*0.30);
-  n += 0.5*noise(p*3.7 - tw*0.22);
-  n += 0.25*noise(p*6.1 + tw*0.17);
+  n += noise(p*2.4 + tw*0.28);
+  n += 0.45*noise(p*3.4 - tw*0.20);
   float angle = 6.28318 * n + 0.7*sin(p.x*2.0 - mod(tw*0.8, 6.28318530718)) + 0.6*cos(p.y*1.7 + mod(tw*0.6, 6.28318530718));
 
       // Direction and its normal
@@ -82,10 +81,10 @@
       float s = dot(p, nrm) * freq + phase;
 
       // Line intensity: peaks where cos(s) ~ 1
-      float lines = pow(0.5 + 0.5*cos(s), 6.0);
+  float lines = pow(0.5 + 0.5*cos(s), 4.5);
 
       // Secondary thinner lines for richness
-      float lines2 = pow(0.5 + 0.5*cos(s*1.7 + 1.2), 5.0) * 0.6;
+  float lines2 = pow(0.5 + 0.5*cos(s*1.6 + 1.2), 4.0) * 0.5;
 
       // Base deep purple and neon glow
       vec3 base = vec3(0.078, 0.0, 0.133); // #140022 approx
@@ -157,7 +156,7 @@
     const uRes  = gl.getUniformLocation(program, 'resolution');
 
     function resize(){
-      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
       const w = Math.floor(window.innerWidth * dpr);
       const h = Math.floor(window.innerHeight * dpr);
       canvas.width = w; canvas.height = h;

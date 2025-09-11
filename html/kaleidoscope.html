@@ -46,8 +46,7 @@
       float tw = mod(time, 628.3185307);
 
       // Kaleidoscope mirror: fold angle into a wedge, then reflect
-      float wedges = 10.0;                  // number of symmetric sectors
-      float w = 6.28318530718 / wedges;     // wedge angle
+  float w = 6.28318530718 / 10.0;       // 10 wedges
       float r = length(p);
       float a = atan(p.y, p.x);
       a = mod(a, w);
@@ -56,7 +55,8 @@
 
       // Animated source pattern: layered sines + rotation
       vec2 q = k;
-      q *= rot(0.2 * sin(mod(tw*0.23, 6.28318530718)));
+  float sa = 0.2 * sin(mod(tw*0.23, 6.28318530718));
+  q *= rot(sa);
       q += 0.25 * vec2(
         sin(3.1*q.y + mod(tw*0.9, 6.28318530718)),
         cos(3.7*q.x - mod(tw*1.1, 6.28318530718))
@@ -135,7 +135,7 @@
     const uRes  = gl.getUniformLocation(program, 'resolution');
 
     function resize(){
-      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
       const w = Math.floor(window.innerWidth * dpr);
       const h = Math.floor(window.innerHeight * dpr);
       canvas.width = w; canvas.height = h;
