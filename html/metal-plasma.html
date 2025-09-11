@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Metal Plasma</title>
+  <style>
+    html, body { margin:0; height:100%; background:#030305; }
+    canvas { display:block; width:100vw; height:100vh; }
+  </style>
+
+  <script id="vs" type="x-shader/x-vertex">
+    attribute vec3 position; attribute vec2 uv; varying vec2 vUv;
+    void main(){ vUv = uv; gl_Position = vec4(position,1.0); }
+  </script>
+
+  <script id="fs" type="x-shader/x-fragment">
+    precision mediump float;
+    varying vec2 vUv; uniform vec2 resolution; uniform float time;
+
+    // compact plasma-like metal sheen
+    vec3 palette(float t){
+      return 0.5 + 0.5*cos(6.2831853*(t + vec3(0.0,0.33,0.66)) + vec3(0.0,0.2,0.4));
+    }
+
+    void main(){
+      vec2 p = vUv*2.0 - 1.0;
+      p.x *= resolution.x / max(resolution.y, 1.0);
+      float t = time * 0.6;
+
+      // layered circular ripples + directional flow for metallic look
+      float r = length(p);
+      float a = atan(p.y, p.x);
+      float f1 = sin(6.0*r - t*3.0 + 0.6*sin(a*3.0 + t));
+      float f2 = sin(3.0*p.x + t*1.9 + 0.4*cos(p.y*4.0));
+      float f3 = sin(5.0*p.y - t*2.2 + 0.3*sin(p.x*3.0));
+
+      float m = smoothstep(-0.8, 0.8, f1*0.6 + f2*0.35 + f3*0.25);
+      vec3 col = palette(m*0.8 + 0.2);
+
+      // metal highlight
+      float spec = pow(max(0.0, dot(normalize(vec3(p,0.3)), normalize(vec3(0.0,0.0,1.0)))), 8.0);
+      col += vec3(0.9,0.86,0.8) * spec * 0.6;
+
+      // subtle vignette
+      float vig = smoothstep(1.2, 0.45, r);
+      col *= mix(0.82, 1.0, vig);
+
+      gl_FragColor = vec4(col, 1.0);
+    }
+  </script>
+</head>
+<body>
+  <canvas id="metal"></canvas>
+  <script>
+    const canvas = document.getElementById('metal');
+    const gl = canvas.getContext('webgl');
+    if(!gl){ alert('WebGL not supported'); throw new Error('WebGL not supported'); }
+
+    function createShader(type, source){
+      const s = gl.createShader(type);
+      gl.shaderSource(s, source);
+      gl.compileShader(s);
+      if(!gl.getShaderParameter(s, gl.COMPILE_STATUS)){
+        throw new Error(gl.getShaderInfoLog(s) || 'Shader compile failed');
+      }
+      return s;
+    }
+
+    const vs = createShader(gl.VERTEX_SHADER, document.getElementById('vs').textContent);
+    const fs = createShader(gl.FRAGMENT_SHADER, document.getElementById('fs').textContent);
+    const program = gl.createProgram();
+    gl.attachShader(program, vs); gl.attachShader(program, fs); gl.linkProgram(program);
+    if(!gl.getProgramParameter(program, gl.LINK_STATUS)){
+      throw new Error(gl.getProgramInfoLog(program) || 'Program link failed');
+    }
+
+    const positions = new Float32Array([-1,-1,0, 1,-1,0, -1,1,0, 1,1,0]);
+    const uvs = new Float32Array([0,0, 1,0, 0,1, 1,1]);
+
+    const posBuf = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, posBuf); gl.bufferData(gl.ARRAY_BUFFER, positions, gl.STATIC_DRAW);
+    const uvBuf  = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, uvBuf); gl.bufferData(gl.ARRAY_BUFFER, uvs, gl.STATIC_DRAW);
+
+    const aPos = gl.getAttribLocation(program, 'position');
+    const aUv  = gl.getAttribLocation(program, 'uv');
+    const uRes = gl.getUniformLocation(program, 'resolution');
+    const uTim = gl.getUniformLocation(program, 'time');
+
+    // small adaptive scaler (median of recent frame intervals)
+    let __fi_buffer = [];
+    function autoScaleTarget(){
+      if(__fi_buffer.length < 6) return 1.0;
+      const a = __fi_buffer.slice().sort(function(x,y){return x-y;});
+      const median = a[Math.floor(a.length/2)];
+      const fps = 1.0 / Math.max(1e-6, median);
+      const target = 50.0;
+      return Math.max(0.5, Math.min(1.0, fps / target));
+    }
+
+    function resize(){
+      const base = Math.min(window.devicePixelRatio || 1, 1.0);
+      const dpr = base * autoScaleTarget();
+      const w = Math.max(1, Math.floor(window.innerWidth * dpr));
+      const h = Math.max(1, Math.floor(window.innerHeight * dpr));
+      canvas.width = w; canvas.height = h;
+      canvas.style.width = window.innerWidth + 'px';
+      canvas.style.height = window.innerHeight + 'px';
+      gl.viewport(0,0,w,h);
+    }
+    window.addEventListener('resize', resize); resize();
+
+    // render loop with pacing guard
+    let start = performance.now();
+    let last = start;
+    const minDt = 1/90;
+    function render(now){
+      let dt = (now - last) * 0.001;
+      if(dt < minDt){ requestAnimationFrame(render); return; }
+      last = now;
+      __fi_buffer.push(dt); if(__fi_buffer.length > 12) __fi_buffer.shift();
+
+      const t = (now - start) * 0.001;
+      gl.clearColor(0.02,0.02,0.03,1.0); gl.clear(gl.COLOR_BUFFER_BIT);
+      gl.useProgram(program);
+      gl.uniform2f(uRes, canvas.width, canvas.height);
+      gl.uniform1f(uTim, t);
+      gl.bindBuffer(gl.ARRAY_BUFFER, posBuf); gl.enableVertexAttribArray(aPos); gl.vertexAttribPointer(aPos,3,gl.FLOAT,false,0,0);
+      gl.bindBuffer(gl.ARRAY_BUFFER, uvBuf);  gl.enableVertexAttribArray(aUv);  gl.vertexAttribPointer(aUv,2,gl.FLOAT,false,0,0);
+      gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+      requestAnimationFrame(render);
+    }
+    requestAnimationFrame(render);
+  </script>
+</body>
+</html>
