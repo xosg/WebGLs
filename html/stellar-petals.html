@@ -3,9 +3,9 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Desert Dunes — 12s</title>
+  <title>Stellar Petals — 12s</title>
   <style>
-    html,body{height:100%;margin:0;background:#0a0b0d}
+    html,body{height:100%;margin:0;background:#0a0c12}
     canvas{display:block;width:100%;height:100%}
   </style>
 </head>
@@ -20,48 +20,36 @@ varying vec2 vUv;
 uniform vec2 uRes;
 uniform float uPhase;
 
+const float TAU = 6.2831853;
+
 void main(){
-  const float TAU = 6.2831853;
-  // square-normalized coords, x right, y up
+  // Square-normalized coordinates
   vec2 p = (vUv*uRes - 0.5*uRes)/min(uRes.x,uRes.y);
+  float r = length(p);
+  float th = atan(p.y, p.x);
 
-  // subtle shimmer/wind: small x offset varying with y
-  p.x += 0.03 * sin(TAU*(0.15*p.y - 3.0*uPhase));
+  // Petal pattern: integer cycles for seamless wrap
+  float petals = 0.5 + 0.5*cos(6.0*th - TAU*1.0*uPhase);
+  float radial = 0.5 + 0.5*sin(10.0*r - TAU*2.0*uPhase);
 
-  // dune height field from two wave directions (integer temporal multipliers)
-  float wave1 = sin(TAU*(0.45*p.x - 1.0*uPhase));
-  float wave2 = sin(TAU*(0.18*(p.x*0.7 + p.y*0.25) - 2.0*uPhase) + 1.1);
-  float h = p.y*0.8 + 0.35*wave1 + 0.20*wave2;
+  // Combine and shape
+  float field = mix(petals, radial, 0.45);
+  field *= smoothstep(1.1, 0.0, r);  // fade toward edges
+  field = pow(field, 1.1);
 
-  // banding creates ripples
-  float bands = 0.5 + 0.5*sin(TAU*(3.0*h));
-  bands = pow(bands, 1.4);
+  // Color ramp: deep space → magenta → gold
+  vec3 a = vec3(0.05,0.07,0.12);
+  vec3 b = vec3(0.75,0.24,0.86);
+  vec3 c = vec3(1.00,0.84,0.40);
+  vec3 col = mix(a, b, field);
+  col = mix(col, c, smoothstep(0.75, 1.0, field));
 
-  // approximate slope for shading (no extra texture lookups)
-  float dhdx = 0.35*(0.45*TAU)*cos(TAU*(0.45*p.x - 1.0*uPhase))
-             + 0.20*(0.18*0.7*TAU)*cos(TAU*(0.18*(p.x*0.7 + p.y*0.25) - 2.0*uPhase) + 1.1);
-  float shade = clamp(0.55 - 0.25*dhdx, 0.0, 1.0);
+  // Soft glow near center and petal crests
+  float glow = exp(-r*2.2) * (0.3 + 0.7*pow(field,1.6));
+  col += glow * vec3(0.9,0.7,0.5) * 0.25;
 
-  // desert palette: shadow → sand → sunlit
-  vec3 cShadow = vec3(0.18,0.12,0.09);
-  vec3 cSand   = vec3(0.85,0.74,0.56);
-  vec3 cSun    = vec3(1.00,0.92,0.72);
-  vec3 col = mix(cShadow, cSand, bands);
-  col = mix(col, cSun, smoothstep(0.75, 1.0, bands))*shade;
-
-  // sky gradient toward the top
-  float skyT = smoothstep(0.2, 0.75, p.y);
-  vec3 skyCol = mix(vec3(0.36,0.48,0.68), vec3(0.06,0.10,0.20), smoothstep(0.2, 0.95, p.y));
-  col = mix(col, skyCol, skyT*0.9);
-
-  // sun glow near top center
-  vec2 sunPos = vec2(0.0, 0.58);
-  float sun = smoothstep(0.22, 0.0, length(p - sunPos));
-  col += sun * vec3(1.2,1.05,0.85) * 0.35;
-
-  // vignette
-  float r = length(p*vec2(1.0,0.8));
-  col *= mix(0.85, 1.0, smoothstep(1.1, 0.2, r));
+  // Vignette
+  col *= mix(0.86, 1.0, smoothstep(1.15, 0.2, r));
 
   gl_FragColor = vec4(clamp(col,0.0,1.0), 1.0);
 }
@@ -87,7 +75,7 @@ const vb = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, vb); gl.bufferData(
 let __fi_buffer=[]; const FI_MAX=16; function pushDt(dt){ __fi_buffer.push(dt); if(__fi_buffer.length>FI_MAX) __fi_buffer.shift(); }
 function autoScale(){ if(__fi_buffer.length<6) return 1.0; const a=__fi_buffer.slice().sort((x,y)=>x-y); const med=a[Math.floor(a.length/2)]; const fps=1.0/med; const target=50; let s=fps/target; return Math.max(0.5, Math.min(1.0, s)); }
 const MIN_DT = 1/140; // pacing guard
-const PERIOD = 12.0;  // ~10s, not exceeding 15s
+const PERIOD = 12.0;  // forward-only, seamless via sin/cos periodicity
 
 function resizeCanvas(scale){ const dpr = Math.max(1, Math.min(window.devicePixelRatio||1, scale)); const w=Math.floor(window.innerWidth*dpr+0.5), h=Math.floor(window.innerHeight*dpr+0.5); if(canvas.width!==w||canvas.height!==h){ canvas.width=w; canvas.height=h; canvas.style.width=window.innerWidth+'px'; canvas.style.height=window.innerHeight+'px'; gl.viewport(0,0,w,h);} }
 
@@ -99,7 +87,7 @@ function frame(now){ now=performance.now(); let dt=(now-last)/1000; if(dt<MIN_DT
   gl.bindBuffer(gl.ARRAY_BUFFER, vb); gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0,2,gl.FLOAT,false,0,0);
   gl.uniform2f(uRes, w, h);
   const t=(now-start)/1000.0;
-  const phase = (t % PERIOD) / PERIOD; // forward-only periodic phase [0,1)
+  const phase = (t % PERIOD) / PERIOD; // [0,1) forward-only
   gl.uniform1f(uPhase, phase);
   gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
   requestAnimationFrame(frame);
