@@ -3,9 +3,9 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Desert Dunes — 12s</title>
+  <title>Ocean Currents — 10s</title>
   <style>
-    html,body{height:100%;margin:0;background:#0a0b0d}
+    html,body{height:100%;margin:0;background:#07111a}
     canvas{display:block;width:100%;height:100%}
   </style>
 </head>
@@ -20,48 +20,47 @@ varying vec2 vUv;
 uniform vec2 uRes;
 uniform float uPhase;
 
+const float TAU = 6.2831853;
+
+float lineBand(float x){
+  // Make thin bright lines from sine waves
+  float s = 0.5 + 0.5*sin(TAU*x);
+  float l = smoothstep(0.85, 1.0, s);
+  return l;
+}
+
 void main(){
-  const float TAU = 6.2831853;
-  // square-normalized coords, x right, y up
   vec2 p = (vUv*uRes - 0.5*uRes)/min(uRes.x,uRes.y);
 
-  // subtle shimmer/wind: small x offset varying with y
-  p.x += 0.03 * sin(TAU*(0.15*p.y - 3.0*uPhase));
+  // very subtle phase-based rotation/drift
+  float ang = uPhase * TAU * 1.0; // full turn per loop for exact wrap
+  float ca = cos(ang), sa = sin(ang);
+  p = mat2(ca,-sa,sa,ca) * p;
 
-  // dune height field from two wave directions (integer temporal multipliers)
-  float wave1 = sin(TAU*(0.45*p.x - 1.0*uPhase));
-  float wave2 = sin(TAU*(0.18*(p.x*0.7 + p.y*0.25) - 2.0*uPhase) + 1.1);
-  float h = p.y*0.8 + 0.35*wave1 + 0.20*wave2;
+  // Three directional wave fields with integer temporal multipliers
+  float s1 = lineBand(dot(p, normalize(vec2( 1.0, 0.3))) - 1.0*uPhase);
+  float s2 = lineBand(dot(p, normalize(vec2(-0.6, 1.0))) - 2.0*uPhase + 0.18);
+  float s3 = lineBand(dot(p, normalize(vec2( 0.2,-1.0))) - 3.0*uPhase + 0.41);
 
-  // banding creates ripples
-  float bands = 0.5 + 0.5*sin(TAU*(3.0*h));
-  bands = pow(bands, 1.4);
+  // Blend fields; apply gentle spatial frequency
+  float f = 0.0;
+  f += s1 * 0.70;
+  f += s2 * 0.60;
+  f += s3 * 0.55;
+  f = clamp(f, 0.0, 1.0);
 
-  // approximate slope for shading (no extra texture lookups)
-  float dhdx = 0.35*(0.45*TAU)*cos(TAU*(0.45*p.x - 1.0*uPhase))
-             + 0.20*(0.18*0.7*TAU)*cos(TAU*(0.18*(p.x*0.7 + p.y*0.25) - 2.0*uPhase) + 1.1);
-  float shade = clamp(0.55 - 0.25*dhdx, 0.0, 1.0);
+  // Base ocean palette: deep blue to teal
+  vec3 deep = vec3(0.015,0.06,0.11);
+  vec3 teal = vec3(0.05,0.85,0.82);
+  vec3 col = mix(deep, teal, pow(f, 0.9));
 
-  // desert palette: shadow → sand → sunlit
-  vec3 cShadow = vec3(0.18,0.12,0.09);
-  vec3 cSand   = vec3(0.85,0.74,0.56);
-  vec3 cSun    = vec3(1.00,0.92,0.72);
-  vec3 col = mix(cShadow, cSand, bands);
-  col = mix(col, cSun, smoothstep(0.75, 1.0, bands))*shade;
+  // Soft glow along lines
+  float glow = pow(f, 2.0);
+  col += glow * vec3(0.06,0.65,0.9) * 0.25;
 
-  // sky gradient toward the top
-  float skyT = smoothstep(0.2, 0.75, p.y);
-  vec3 skyCol = mix(vec3(0.36,0.48,0.68), vec3(0.06,0.10,0.20), smoothstep(0.2, 0.95, p.y));
-  col = mix(col, skyCol, skyT*0.9);
-
-  // sun glow near top center
-  vec2 sunPos = vec2(0.0, 0.58);
-  float sun = smoothstep(0.22, 0.0, length(p - sunPos));
-  col += sun * vec3(1.2,1.05,0.85) * 0.35;
-
-  // vignette
-  float r = length(p*vec2(1.0,0.8));
-  col *= mix(0.85, 1.0, smoothstep(1.1, 0.2, r));
+  // Subtle vignetting
+  float r = length(p*vec2(1.0,0.85));
+  col *= mix(0.86, 1.0, smoothstep(1.1, 0.2, r));
 
   gl_FragColor = vec4(clamp(col,0.0,1.0), 1.0);
 }
@@ -87,8 +86,8 @@ const vb = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, vb); gl.bufferData(
 let __fi_buffer=[]; const FI_MAX=16; function pushDt(dt){ __fi_buffer.push(dt); if(__fi_buffer.length>FI_MAX) __fi_buffer.shift(); }
 function autoScale(){ if(__fi_buffer.length<6) return 1.0; const a=__fi_buffer.slice().sort((x,y)=>x-y); const med=a[Math.floor(a.length/2)]; const fps=1.0/med; const target=50; let s=fps/target; return Math.max(0.5, Math.min(1.0, s)); }
 const MIN_DT = 1/140; // pacing guard
-const PERIOD = 12.0;  // ~10s, not exceeding 15s
-const LOOP_STEPS = 720; // quantize to 720 steps per loop
+const PERIOD = 10.0;  // adhere to 10–15s rule
+const LOOP_STEPS = 600; // quantize to 600 steps per loop
 
 function resizeCanvas(scale){ const dpr = Math.max(1, Math.min(window.devicePixelRatio||1, scale)); const w=Math.floor(window.innerWidth*dpr+0.5), h=Math.floor(window.innerHeight*dpr+0.5); if(canvas.width!==w||canvas.height!==h){ canvas.width=w; canvas.height=h; canvas.style.width=window.innerWidth+'px'; canvas.style.height=window.innerHeight+'px'; gl.viewport(0,0,w,h);} }
 
