@@ -32,7 +32,11 @@
     </script>
     
     <script type="x-shader/x-fragment" id="fragmentShader">
+        #ifdef GL_FRAGMENT_PRECISION_HIGH
+        precision highp float;
+        #else
         precision mediump float;
+        #endif
         
         varying vec2 vUv;
         uniform float time;
@@ -44,7 +48,7 @@
             return 0.5 + 0.5 * cos(6.28318 * (vec3(0.0, 0.33, 0.67) + t));
         }
         
-        void main() {
+    void main() {
             // Normalize pixel coords to -1..1 with aspect
             vec2 p = vUv * 2.0 - 1.0;
             p.x *= resolution.x / resolution.y;
@@ -55,18 +59,24 @@
             float a = atan(p.y, p.x) + mp.x * 1.2;
             float r = length(p) * (1.0 + mp.y * 0.8);
             
+            // Wrap global time to keep phases in a stable range (prevents precision loss)
+            float timeWrap = mod(time, 628.3185307); // ~200*pi
+
             // Tunnel bands
             float v = 0.0;
             const int ITER = 3;
             for (int i = 0; i < ITER; i++) {
                 float fi = float(i);
-                float t = time * (1.0 - 0.18 * fi);
+                float t = timeWrap * (1.0 - 0.18 * fi);
+                t = mod(t, 6.28318530718); // keep near [-pi..pi]
                 v += 0.5 * sin(a * 5.0 + fi * 3.14159265 + t);
                 v += 0.5 * cos(r * 10.0 - t + fi);
             }
             v = v / float(ITER);
-            
-            vec3 col = palette(v + time * 0.1);
+
+            // Use bounded phase for color drift to avoid large-argument artifacts
+            float colPhase = sin(time * 0.1);
+            vec3 col = palette(v + colPhase);
             col *= smoothstep(1.2, 0.0, r); // vignette
             
             gl_FragColor = vec4(col, 1.0);

@@ -23,7 +23,11 @@
   </script>
 
   <script type="x-shader/x-fragment" id="fs">
+    #ifdef GL_FRAGMENT_PRECISION_HIGH
+    precision highp float;
+    #else
     precision mediump float;
+    #endif
 
     varying vec2 vUv;
     uniform vec2 resolution;
@@ -44,8 +48,9 @@
       float base = 40.0;
 
       // Two nearly-aligned stripe fields (slowly counter-rotating)
-      float a1 = time * 0.12;
-      float a2 = -time * 0.10 + 0.18; // slight offset for richer moiré
+  float tw = mod(time, 628.3185307);
+  float a1 = tw * 0.12;
+  float a2 = -tw * 0.10 + 0.18; // slight offset for richer moiré
 
       vec2 q1 = rot(a1) * p;
       vec2 q2 = rot(a2) * p;

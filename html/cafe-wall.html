@@ -23,7 +23,11 @@
   </script>
 
   <script type="x-shader/x-fragment" id="fs">
+    #ifdef GL_FRAGMENT_PRECISION_HIGH
+    precision highp float;
+    #else
     precision mediump float;
+    #endif
 
     varying vec2 vUv;
   uniform vec2 resolution;
@@ -46,12 +50,13 @@
   // Animate mortar a little per row for a living illusion
   float row = floor(px.y / cell.y);
   float mortarBase = 5.0; // horizontal separator thickness in px
-  float mortar = clamp(mortarBase + 1.2 * sin(time * 1.6 * speed + row * 0.7), 2.0, 8.0);
+  float tw = mod(time, 628.3185307);
+  float mortar = clamp(mortarBase + 1.2 * sin(tw * 1.6 * speed + row * 0.7), 2.0, 8.0);
 
   // Row index and horizontal offset for alternate rows
   // Add a tiny animated wobble to the half-tile shift to suggest motion
   float rowShiftBase = mod(row, 2.0) * 0.5; // half-tile shift on odd rows
-  float rowShift = rowShiftBase + 0.08 * sin(time * 1.2 * speed + row * 0.8);
+  float rowShift = rowShiftBase + 0.08 * sin(tw * 1.2 * speed + row * 0.8);
 
       // Column index after applying row shift
       float col = floor(px.x / cell.x + rowShift);

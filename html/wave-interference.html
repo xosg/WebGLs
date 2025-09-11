@@ -23,7 +23,11 @@
   </script>
 
   <script type="x-shader/x-fragment" id="fs">
+    #ifdef GL_FRAGMENT_PRECISION_HIGH
+    precision highp float;
+    #else
     precision mediump float;
+    #endif
 
     varying vec2 vUv;
     uniform vec2 resolution;
@@ -42,15 +46,16 @@
       p.x *= resolution.x / resolution.y;
 
       // Three moving point sources (no vignette, bright look)
-      vec2 s1 = vec2(0.60 * sin(time*0.50), 0.50 * cos(time*0.40));
-      vec2 s2 = vec2(0.70 * sin(time*0.30 + 2.0), 0.60 * cos(time*0.35 - 1.0));
-      vec2 s3 = vec2(0.50 * sin(time*0.42 - 2.0), 0.70 * cos(time*0.55 + 1.5));
+  float tw = mod(time, 628.3185307);
+  vec2 s1 = vec2(0.60 * sin(mod(tw*0.50, 6.28318530718)), 0.50 * cos(mod(tw*0.40, 6.28318530718)));
+  vec2 s2 = vec2(0.70 * sin(mod(tw*0.30, 6.28318530718) + 2.0), 0.60 * cos(mod(tw*0.35, 6.28318530718) - 1.0));
+  vec2 s3 = vec2(0.50 * sin(mod(tw*0.42, 6.28318530718) - 2.0), 0.70 * cos(mod(tw*0.55, 6.28318530718) + 1.5));
 
       float k = 18.0; // spatial frequency
       float v = 0.0;
-      v += sin(k * length(p - s1) - time * 1.40);
-      v += sin(k * 1.03 * length(p - s2) - time * 1.20 + 1.3);
-      v += sin(k * 0.97 * length(p - s3) - time * 1.60 + 2.1);
+  v += sin(k * length(p - s1) - mod(tw * 1.40, 6.28318530718));
+  v += sin(k * 1.03 * length(p - s2) - mod(tw * 1.20, 6.28318530718) + 1.3);
+  v += sin(k * 0.97 * length(p - s3) - mod(tw * 1.60, 6.28318530718) + 2.1);
       v /= 3.0; // normalize to -1..1 roughly
 
       // Map to 0..1 and colorize with HSV; mix towards white for a pastel feel

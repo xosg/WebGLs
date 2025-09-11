@@ -23,7 +23,11 @@
   </script>
 
   <script type="x-shader/x-fragment" id="fs">
+    #ifdef GL_FRAGMENT_PRECISION_HIGH
+    precision highp float;
+    #else
     precision mediump float;
+    #endif
 
     varying vec2 vUv;
     uniform vec2 resolution;
@@ -62,10 +66,11 @@
 
       // Vector field angle using animated noise and sines
       float n = 0.0;
-      n += noise(p*2.0 + time*0.30);
-      n += 0.5*noise(p*3.7 - time*0.22);
-      n += 0.25*noise(p*6.1 + time*0.17);
-      float angle = 6.28318 * n + 0.7*sin(p.x*2.0 - time*0.8) + 0.6*cos(p.y*1.7 + time*0.6);
+  float tw = mod(time, 628.3185307);
+  n += noise(p*2.0 + tw*0.30);
+  n += 0.5*noise(p*3.7 - tw*0.22);
+  n += 0.25*noise(p*6.1 + tw*0.17);
+  float angle = 6.28318 * n + 0.7*sin(p.x*2.0 - mod(tw*0.8, 6.28318530718)) + 0.6*cos(p.y*1.7 + mod(tw*0.6, 6.28318530718));
 
       // Direction and its normal
       vec2 v = vec2(cos(angle), sin(angle));
