@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Ripple Lens</title>
+  <style>
+    html, body { margin:0; height:100%; background:#06070b; }
+    canvas { display:block; width:100vw; height:100vh; }
+  </style>
+
+  <script id="vs" type="x-shader/x-vertex">
+    attribute vec3 position; attribute vec2 uv; varying vec2 vUv;
+    void main(){ vUv = uv; gl_Position = vec4(position,1.0); }
+  </script>
+
+  <script id="fs" type="x-shader/x-fragment">
+    precision mediump float;
+    varying vec2 vUv; uniform vec2 resolution; uniform float time;
+
+    // cosine palette
+    vec3 pal(float x){ return 0.55 + 0.45*cos(6.2831853*(x + vec3(0.00, 0.33, 0.67))); }
+
+    void main(){
+      vec2 p = vUv*2.0 - 1.0; p.x *= resolution.x / max(resolution.y, 1.0);
+      float t = time;
+
+      // moving ripple centers
+      vec2 c1 = 0.6*vec2(sin(t*0.6),  cos(t*0.5));
+      vec2 c2 = 0.7*vec2(cos(t*0.4+1.2), sin(t*0.7));
+      vec2 c3 = 0.8*vec2(sin(t*0.5-0.8), cos(t*0.3+2.0));
+
+      // accumulate small radial displacements (lens ripple)
+      vec2 disp = vec2(0.0);
+      float k = 10.0; // wavelength factor
+      float w = 1.6;  // speed factor
+      for(int i=0;i<3;i++){
+        vec2 c = (i==0)?c1:((i==1)?c2:c3);
+        vec2 d = p - c; float r = max(length(d), 1e-3);
+        float ph = r*k - t*w;
+        disp += (d/r) * (0.015 * sin(ph) / (1.0 + r*2.0));
+      }
+
+      vec2 q = p + disp;
+
+      // color from gently warped coords + ripple phase
+      float v = 0.50*q.x + 0.35*q.y + 0.08*sin(q.x*3.0 + t*0.5);
+      vec3 col = pal(v);
+
+      // subtle highlight where ripples align
+      float crest = 0.0;
+      {
+        vec2 d1 = p - c1; float r1 = length(d1);
+        vec2 d2 = p - c2; float r2 = length(d2);
+        vec2 d3 = p - c3; float r3 = length(d3);
+        float s = cos(r1*k - t*w) + cos(r2*k - t*w) + cos(r3*k - t*w);
+        crest = smoothstep(2.2, 2.95, s);
+      }
+      col += crest * vec3(0.35, 0.45, 0.55);
+
+      // vignette
+      vec2 r = (vUv-0.5) * vec2(resolution.x / max(resolution.y,1.0), 1.0);
+      col *= mix(0.86, 1.0, smoothstep(1.15, 0.45, length(r)));
+
+      gl_FragColor = vec4(col, 1.0);
+    }
+  </script>
+</head>
+<body>
+  <canvas id="ripple"></canvas>
+  <script>
+    const canvas = document.getElementById('ripple');
+    const gl = canvas.getContext('webgl');
+    if(!gl){ alert('WebGL not supported'); throw new Error('WebGL not supported'); }
+
+    function createShader(type, source){
+      const s = gl.createShader(type);
+      gl.shaderSource(s, source);
+      gl.compileShader(s);
+      if(!gl.getShaderParameter(s, gl.COMPILE_STATUS)){
+        throw new Error(gl.getShaderInfoLog(s) || 'Shader compile failed');
+      }
+      return s;
+    }
+
+    const vs = createShader(gl.VERTEX_SHADER, document.getElementById('vs').textContent);
+    const fs = createShader(gl.FRAGMENT_SHADER, document.getElementById('fs').textContent);
+    const program = gl.createProgram();
+    gl.attachShader(program, vs); gl.attachShader(program, fs); gl.linkProgram(program);
+    if(!gl.getProgramParameter(program, gl.LINK_STATUS)){
+      throw new Error(gl.getProgramInfoLog(program) || 'Program link failed');
+    }
+
+    const positions = new Float32Array([-1,-1,0, 1,-1,0, -1,1,0, 1,1,0]);
+    const uvs = new Float32Array([0,0, 1,0, 0,1, 1,1]);
+
+    const posBuf = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, posBuf); gl.bufferData(gl.ARRAY_BUFFER, positions, gl.STATIC_DRAW);
+    const uvBuf  = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, uvBuf); gl.bufferData(gl.ARRAY_BUFFER, uvs, gl.STATIC_DRAW);
+
+    const aPos = gl.getAttribLocation(program, 'position');
+    const aUv  = gl.getAttribLocation(program, 'uv');
+    const uRes = gl.getUniformLocation(program, 'resolution');
+    const uTim = gl.getUniformLocation(program, 'time');
+
+    function resize(){
+      const dpr = Math.min(window.devicePixelRatio || 1, 1.0);
+      const w = Math.floor(window.innerWidth * dpr);
+      const h = Math.floor(window.innerHeight * dpr);
+      canvas.width = w; canvas.height = h;
+      canvas.style.width = window.innerWidth + 'px';
+      canvas.style.height = window.innerHeight + 'px';
+      gl.viewport(0,0,w,h);
+    }
+    window.addEventListener('resize', resize); resize();
+
+    let start = performance.now();
+    function render(now){
+      const t = (now - start) * 0.001;
+      gl.clearColor(0.016,0.02,0.04,1.0); gl.clear(gl.COLOR_BUFFER_BIT);
+      gl.useProgram(program);
+      gl.uniform2f(uRes, canvas.width, canvas.height);
+      gl.uniform1f(uTim, t);
+      gl.bindBuffer(gl.ARRAY_BUFFER, posBuf); gl.enableVertexAttribArray(aPos); gl.vertexAttribPointer(aPos,3,gl.FLOAT,false,0,0);
+      gl.bindBuffer(gl.ARRAY_BUFFER, uvBuf);  gl.enableVertexAttribArray(aUv);  gl.vertexAttribPointer(aUv,2,gl.FLOAT,false,0,0);
+      gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+      requestAnimationFrame(render);
+    }
+    requestAnimationFrame(render);
+  </script>
+</body>
+</html>
