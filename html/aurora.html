@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Aurora</title>
+  <style>
+    html, body { margin:0; height:100%; background:#02040a; }
+    canvas { display:block; width:100vw; height:100vh; }
+  </style>
+</head>
+<body>
+  <canvas id="aurora"></canvas>
+
+  <script id="vs" type="x-shader/x-vertex">
+    attribute vec3 position; attribute vec2 uv; varying vec2 vUv;
+    void main(){ vUv = uv; gl_Position = vec4(position,1.0); }
+  </script>
+
+  <script id="fs" type="x-shader/x-fragment">
+    #ifdef GL_FRAGMENT_PRECISION_HIGH
+    precision highp float;
+    #else
+    precision mediump float;
+    #endif
+    varying vec2 vUv; uniform vec2 resolution; uniform float time;
+
+    void main(){
+      // NDC with aspect
+      vec2 p = vUv*2.0 - 1.0; p.x *= resolution.x / max(resolution.y, 1.0);
+      float tw = mod(time, 628.3185307);
+
+      // Night sky gradient
+      vec3 skyTop = vec3(0.01,0.02,0.05);
+      vec3 skyBot = vec3(0.00,0.00,0.02);
+      vec3 col = mix(skyBot, skyTop, smoothstep(-1.0, 1.0, p.y));
+
+      // Three soft curtains (cheap sines + exponential falloff)
+      float y1 = p.y + 0.25*sin(p.x*2.2 - 0.7*sin(p.x*0.7 + tw*0.2) + tw*0.5);
+      float y2 = p.y + 0.20*sin(p.x*3.3 + tw*0.7);
+      float y3 = p.y + 0.18*sin(p.x*1.6 - tw*0.4);
+
+      float i1 = exp(-12.0*abs(y1 - 0.20));
+      float i2 = exp(-10.0*abs(y2 + 0.00));
+      float i3 = exp(-9.0 *abs(y3 + 0.15));
+
+      vec3 c1 = vec3(0.10, 0.90, 0.60);
+      vec3 c2 = vec3(0.20, 0.80, 1.00);
+      vec3 c3 = vec3(0.90, 0.40, 1.00);
+      vec3 aur = i1*c1 + i2*c2 + i3*c3;
+
+      // Mild self-bloom and fade at edges
+      float glow = i1 + i2 + i3; col += aur * (0.9 + 0.3*glow);
+      float ar = resolution.x / max(resolution.y, 1.0);
+      vec2 q = (vUv - 0.5) * vec2(ar, 1.0);
+      col *= mix(0.88, 1.0, 1.0 - smoothstep(0.6, 1.05, length(q)));
+
+      gl_FragColor = vec4(col, 1.0);
+    }
+  </script>
+
+  <script>
+    const canvas = document.getElementById('aurora');
+    const gl = canvas.getContext('webgl');
+    if(!gl){ alert('WebGL not supported'); throw new Error('WebGL not supported'); }
+
+    function createShader(type, source){ const s=gl.createShader(type); gl.shaderSource(s, source); gl.compileShader(s); if(!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s)); return s; }
+    const vs = createShader(gl.VERTEX_SHADER, document.getElementById('vs').textContent);
+    const fs = createShader(gl.FRAGMENT_SHADER, document.getElementById('fs').textContent);
+  const program = gl.createProgram(); gl.attachShader(program, vs); gl.attachShader(program, fs); gl.linkProgram(program);
+  if(!gl.getProgramParameter(program, gl.LINK_STATUS)){ throw new Error(gl.getProgramInfoLog(program)); }
+
+    const pos = new Float32Array([-1,-1,0, 1,-1,0, -1,1,0, 1,1,0]);
+    const uv  = new Float32Array([0,0, 1,0, 0,1, 1,1]);
+    const pb = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, pb); gl.bufferData(gl.ARRAY_BUFFER, pos, gl.STATIC_DRAW);
+    const ub = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, ub); gl.bufferData(gl.ARRAY_BUFFER, uv, gl.STATIC_DRAW);
+
+    const aPos = gl.getAttribLocation(program,'position');
+    const aUv  = gl.getAttribLocation(program,'uv');
+    const uTime= gl.getUniformLocation(program,'time');
+    const uRes = gl.getUniformLocation(program,'resolution');
+
+    function resize(){
+      const dpr = Math.min(window.devicePixelRatio||1, 1.5);
+      const w = Math.floor(window.innerWidth*dpr), h = Math.floor(window.innerHeight*dpr);
+      canvas.width=w; canvas.height=h; canvas.style.width=window.innerWidth+'px'; canvas.style.height=window.innerHeight+'px';
+      gl.viewport(0,0,w,h);
+    }
+    window.addEventListener('resize', resize); resize();
+
+    let start = performance.now();
+    function render(now){
+      const t=(now-start)*0.001;
+      gl.clearColor(0.01,0.02,0.05,1.0); gl.clear(gl.COLOR_BUFFER_BIT);
+      gl.useProgram(program);
+      gl.uniform1f(uTime,t); gl.uniform2f(uRes, canvas.width, canvas.height);
+      gl.bindBuffer(gl.ARRAY_BUFFER, pb); gl.enableVertexAttribArray(aPos); gl.vertexAttribPointer(aPos,3,gl.FLOAT,false,0,0);
+      gl.bindBuffer(gl.ARRAY_BUFFER, ub); gl.enableVertexAttribArray(aUv); gl.vertexAttribPointer(aUv,2,gl.FLOAT,false,0,0);
+      gl.drawArrays(gl.TRIANGLE_STRIP,0,4); requestAnimationFrame(render);
+    }
+    requestAnimationFrame(render);
+  </script>
+</body>
+</html>
