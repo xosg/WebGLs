@@ -23,14 +23,11 @@
 
     <script>
 
-        // const ratio = innerWidth / innerHeight
-        const min = Math.min(innerWidth, innerHeight)
-
         const vertex = `
             attribute vec2 GL_position;
             varying vec2 UV;
             void main() {
-                UV = GL_position * vec2(${innerWidth / min}, ${innerHeight / min});
+                UV = GL_position * vec2(${innerWidth / innerHeight}, 1);
                 gl_Position = vec4(GL_position, 0.0, 1.0);
             }
         `;
@@ -99,7 +96,6 @@
 
         const Time = gl.getUniformLocation(program, "time");
 
-        // gl.clear(gl.COLOR_BUFFER_BIT);
         gl.useProgram(program);
 
         function render(time) {
