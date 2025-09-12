@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Symmetric Light</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #000;
+        }
+
+        canvas {
+            display: block;
+            /* width: 100vw;
+            height: 100vh; */
+        }
+    </style>
+</head>
+
+<body>
+    <canvas></canvas>
+
+    <script>
+
+        const canvas = document.querySelector('canvas');
+        const gl = canvas.getContext('webgl');
+
+
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+        gl.viewport(0, 0, canvas.width, canvas.height);
+
+
+        // Convert from [-1,1] to [-.5, .5]
+        const vsSource = `
+            attribute   vec2    aPosition   ;
+            varying     vec2    UV          ;
+            void main() {
+                UV = aPosition / 2.0;
+                gl_Position = vec4(aPosition, 0.0, 1.0);
+            }
+        `;
+
+        const fsSource = `
+            precision   highp   float   ;
+            varying     vec2    UV      ;
+            uniform     float   iTime   ;
+            
+            void main() {                
+                vec3 c;
+                float time = iTime;
+                float l = length(UV);
+                vec2 n = UV / l;
+                for(int i=0; i<3; i++) {
+                    time += 0.07;
+                    vec2 uv = UV + 0.5;
+                    uv += n * (sin(time) + 1.0) * abs(sin(l * 9.0 - time*2.0));
+                    c[i] = 0.01 / length(mod(uv, 1.0) - 0.5);
+                }
+                gl_FragColor = vec4(c/l, 1.0);
+            }
+        `;
+
+        // Compile shader
+        function compileShader(source, type) {
+            const shader = gl.createShader(type);
+            gl.shaderSource(shader, source);
+            gl.compileShader(shader);
+
+            return shader;
+        }
+
+        const vertexShader = compileShader(vsSource, gl.VERTEX_SHADER);
+        const fragmentShader = compileShader(fsSource, gl.FRAGMENT_SHADER);
+
+        // Create shader program
+        const shaderProgram = gl.createProgram();
+        gl.attachShader(shaderProgram, vertexShader);
+        gl.attachShader(shaderProgram, fragmentShader);
+        gl.linkProgram(shaderProgram);
+
+        gl.useProgram(shaderProgram);
+
+        // Set up vertex buffers for a full-screen quad
+        const vertices = new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]);
+        const vertexBuffer = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffer);
+        gl.bufferData(gl.ARRAY_BUFFER, vertices, gl.STATIC_DRAW);
+
+        const positionAttributeLocation = gl.getAttribLocation(shaderProgram, "aPosition");
+        gl.enableVertexAttribArray(positionAttributeLocation);
+        gl.vertexAttribPointer(positionAttributeLocation, 2, gl.FLOAT, false, 0, 0);
+
+        // Get uniform locations
+        const iTimeLocation = gl.getUniformLocation(shaderProgram, "iTime");
+
+        // Animation loop
+        function render(time) {
+            time *= 0.001;  // Convert to seconds
+
+            gl.uniform1f(iTimeLocation, time);
+
+            gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+
+            requestAnimationFrame(render);
+        }
+
+        requestAnimationFrame(render);
+    </script>
+</body>
+
+</html>
