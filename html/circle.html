@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>circle</title>
+    <style>
+        body,
+        html {
+            margin: 0;
+            padding: 0;
+        }
+
+        canvas {
+            display: block;
+            background-color: black;
+        }
+    </style>
+</head>
+
+<body>
+    <canvas></canvas>
+
+    <script>
+
+        const min = Math.min(innerWidth, innerHeight);
+
+        const vertex = `
+            attribute vec2 GL_position;
+            varying vec2 UV;
+            void main() {
+                UV = GL_position * vec2(${innerWidth / min}, ${innerHeight / min});
+                gl_Position = vec4(GL_position, 0.0, 1.0);
+            }
+        `;
+
+        const fragment = `
+            precision highp float;
+            uniform float time;
+            varying vec2 UV;
+
+            void main() {                
+                float t = 2500. + sin(time) * 2.5 - time * 4.5;
+                float _ = pow(length(UV) * 1.2, 3.);
+                
+                float strength = sin(_ * 12.5) + 1. ;
+                float height = (sin(t * strength) + 1.) / 2.;
+
+                float alpha = (height - 1.) * 0.014  - _ ;
+                gl_FragColor = vec4(1.) * height + alpha * 0.652;
+
+                gl_FragColor.a = step(_, 1.);
+            }
+        `;
+
+        function createShader(gl, type, source) {
+            const shader = gl.createShader(type);
+            gl.shaderSource(shader, source);
+            gl.compileShader(shader);
+            return shader;
+        }
+
+        function createProgram(gl, vertexShader, fragmentShader) {
+            const program = gl.createProgram();
+            gl.attachShader(program, vertexShader);
+            gl.attachShader(program, fragmentShader);
+            gl.linkProgram(program);
+            return program;
+        }
+
+        const canvas = document.querySelector("canvas");
+        const gl = canvas.getContext("webgl");
+
+        canvas.width = innerWidth;
+        canvas.height = innerHeight;
+        gl.viewport(0, 0, innerWidth, innerHeight);
+
+
+        const vertexShader = createShader(gl, gl.VERTEX_SHADER, vertex);
+        const fragmentShader = createShader(gl, gl.FRAGMENT_SHADER, fragment);
+        const program = createProgram(gl, vertexShader, fragmentShader);
+
+        const positionBuffer = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+        gl.bufferData(
+            gl.ARRAY_BUFFER,
+            new Float32Array([
+                -1, -1,
+                1, -1,
+                -1, 1,
+                1, 1
+            ]),
+            gl.STATIC_DRAW
+        );
+
+        const GL_position = gl.getAttribLocation(program, "GL_position");
+        gl.enableVertexAttribArray(GL_position);
+        gl.vertexAttribPointer(GL_position, 2, gl.FLOAT, false, 0, 0);
+
+        const Time = gl.getUniformLocation(program, "time");
+
+        gl.useProgram(program);
+
+        function render(time) {
+            gl.uniform1f(Time, time * 0.001 / 3);
+            gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+            requestAnimationFrame(render);
+        }
+
+        requestAnimationFrame(render);
+    </script>
+</body>
+
+</html>
