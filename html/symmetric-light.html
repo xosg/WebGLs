@@ -9,13 +9,7 @@
         body {
             margin: 0;
             padding: 0;
-            background-color: #000;
-        }
-
-        canvas {
-            display: block;
-            /* width: 100vw;
-            height: 100vh; */
+            line-height: 0;
         }
     </style>
 </head>
@@ -33,13 +27,15 @@
         canvas.height = window.innerHeight;
         gl.viewport(0, 0, canvas.width, canvas.height);
 
+        const [x, y] = innerWidth > innerHeight
+            ? [innerWidth / innerHeight, 1]
+            : [1, innerHeight / innerWidth]
 
-        // Convert from [-1,1] to [-.5, .5]
         const vsSource = `
             attribute   vec2    aPosition   ;
             varying     vec2    UV          ;
             void main() {
-                UV = aPosition / 2.0;
+                UV = aPosition * vec2(${x/2}, ${y/2});
                 gl_Position = vec4(aPosition, 0.0, 1.0);
             }
         `;
