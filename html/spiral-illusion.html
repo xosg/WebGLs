@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Spiral Illusion</title>
+  <style>
+    html,
+    body {
+      margin: 0;
+    }
+
+    canvas {
+      display: block;
+    }
+  </style>
+</head>
+
+<body>
+  <canvas></canvas>
+
+  <script>
+    function createShader(gl, src, type) {
+      const s = gl.createShader(type);
+      gl.shaderSource(s, src);
+      gl.compileShader(s);
+      return s;
+    }
+    function createProgram(gl, vsSrc, fsSrc) {
+      const vs = createShader(gl, vsSrc, gl.VERTEX_SHADER);
+      const fs = createShader(gl, fsSrc, gl.FRAGMENT_SHADER);
+      const p = gl.createProgram();
+      gl.attachShader(p, vs);
+      gl.attachShader(p, fs);
+      gl.bindAttribLocation(p, 0, 'aPos');
+      gl.linkProgram(p);
+
+      return p;
+    }
+    const canvas = document.querySelector('canvas');
+    const gl = canvas.getContext('webgl', { antialias: true });
+
+    const [x, y] = innerWidth > innerHeight
+      ? [innerWidth / innerHeight, 1]
+      : [1, innerHeight / innerWidth]
+
+    const vs = `
+        attribute vec2 aPos; 
+        varying vec2 uv; 
+        void main(){ 
+          uv = aPos * vec2(${x}, ${y});
+          gl_Position = vec4(aPos, 0.0, 1.0);
+        } 
+    `
+
+    const fs = `
+      precision mediump float; 
+      varying vec2 uv; 
+      uniform float iTime; 
+
+      void main( ){
+        float distance = length(uv);
+        float angle = atan(uv.y, uv.x);
+          
+        float color = 
+            sin(angle + distance * 10.0) 
+          * cos(angle + distance * iTime - iTime)
+          * 6.0;
+
+        gl_FragColor = vec4(vec3(color), 1.0); 
+      }
+    `
+
+    const prog = createProgram(gl, vs, fs);
+
+    const iTime = gl.getUniformLocation(prog, 'iTime');
+
+    const vb = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, vb);
+    gl.bufferData(gl.ARRAY_BUFFER,
+      new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]),
+      gl.STATIC_DRAW);
+
+    canvas.width = innerWidth; canvas.height = innerHeight;
+    gl.viewport(0, 0, innerWidth, innerHeight);
+
+    gl.useProgram(prog);
+    gl.bindBuffer(gl.ARRAY_BUFFER, vb);
+    gl.enableVertexAttribArray(0);
+    gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+
+    function frame(now) {
+      // zigzag
+      now = Math.abs((now / 1000) % 40 - 20)
+      gl.uniform1f(iTime, now);
+      gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+      requestAnimationFrame(frame);
+    }
+
+    frame();
+  </script>
+
+</body>
+
+</html>
