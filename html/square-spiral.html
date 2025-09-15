@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ShaderToy-style Shader</title>
+    <style>
+        body,
+        html {
+            margin: 0;
+            height: 100%;
+            overflow: hidden;
+            background: black;
+        }
+
+        canvas {
+            display: block;
+            width: 100vw;
+            height: 100vh;
+        }
+    </style>
+</head>
+
+<body>
+    <canvas></canvas>
+
+
+    <script>
+        const canvas = document.querySelector('canvas');
+        const gl = canvas.getContext('webgl2');
+
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+        gl.viewport(0, 0, canvas.width, canvas.height);
+
+
+        // Compile shader helper
+        function compileShader(type, source) {
+            const shader = gl.createShader(type);
+            gl.shaderSource(shader, source);
+            gl.compileShader(shader);
+            return shader;
+        }
+
+        // Create program helper
+        function createProgram(vertexSource, fragmentSource) {
+            const vertexShader = compileShader(gl.VERTEX_SHADER, vertexSource);
+            const fragmentShader = compileShader(gl.FRAGMENT_SHADER, fragmentSource);
+            const program = gl.createProgram();
+            gl.attachShader(program, vertexShader);
+            gl.attachShader(program, fragmentShader);
+            gl.linkProgram(program);
+            return program;
+        }
+
+        const vertex =
+            `#version 300 es
+            precision highp float;
+            in vec4 a_position;
+            void main() {
+                gl_Position = a_position;
+            }
+        `
+
+
+        const fragment =
+            `#version 300 es
+            precision highp float;
+            out vec4 fragColor;
+            uniform float iTime;
+
+            void main() {
+                vec2 c = ceil((gl_FragCoord.xy *2. - vec2(${innerWidth}, ${innerHeight})) / 20. * sin(iTime));
+
+                vec2 o = sign(mat2(1, 1, -1, 1) * c + 1.);
+                int q = int(dot(c, o) > 0.);
+                q += (o.x > 0. ? 2 : 1) ^ int(o.y > 0.);
+
+                o = vec2(1., 0.);
+                vec4 colors[4] = vec4[](o.xyxx, o.xxyx, o.yxxx, o.yyyx);
+
+                int idx = (ivec4(c.xy, -c.xy)[q & 3] - q) & 3;
+
+                fragColor = colors[idx];
+
+            }
+        `
+
+        const program = createProgram(vertex, fragment);
+
+        // Look up attribute and uniform locations
+        const positionLoc = gl.getAttribLocation(program, 'a_position');
+
+        const iTimeLoc = gl.getUniformLocation(program, 'iTime');
+
+        // Create a buffer for a fullscreen quad
+        const positionBuffer = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+
+        // Two triangles that cover the screen [-1,1]
+        const positions = new Float32Array([
+            -1, -1,
+            1, -1,
+            -1, 1,
+            1, 1,
+        ]);
+
+        gl.bufferData(gl.ARRAY_BUFFER, positions, gl.STATIC_DRAW);
+
+        gl.useProgram(program);
+        gl.enableVertexAttribArray(positionLoc);
+        gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+        gl.vertexAttribPointer(positionLoc, 2, gl.FLOAT, false, 0, 0);
+
+        function render(time) {
+            gl.uniform1f(iTimeLoc, time / 1000);
+
+            // Draw fullscreen quad
+            gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+
+            requestAnimationFrame(render);
+        }
+
+        (render)();
+    </script>
+</body>
+
+</html>
