@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Escher Grid Warp</title>
+  <title>vertigo</title>
   <style>
     html,
     body {
@@ -35,21 +35,19 @@
     let fs =
       `#version 300 es
         precision highp float;
-        uniform float t;
+        uniform float iTime;
         out vec4 fragColor;
 
         void main(){
-          vec2 p = gl_FragCoord.xy *2. - vec2(${innerWidth}, ${innerHeight});
-          p /= ${Math.min(innerWidth, innerHeight)}.;
+          vec2 uv = gl_FragCoord.xy *2. - vec2(${innerWidth}, ${innerHeight});
+          uv /= ${Math.min(innerWidth, innerHeight)}.;
+
+          float d = length(uv);
           
-          float r = length(p);
-          float ang = atan(p.y, p.x) + 0.3*sin(t*0.6) + 0.6*r;
-          vec2 q = vec2(cos(ang), sin(ang)) * (r + 0.15*sin(2.0*r - t*0.8));
-
-          vec2 f = abs(fract(q * 6.) - 0.5) * 30.;
-          float line = step(min(f.x, f.y), 1.0);
-
-          fragColor = vec4(vec3(line), 1.0);
+          d = sin(d*16. + iTime*2.) / sign(d - uv.x * sin(iTime+uv.y) * 2.);
+          
+          d = pow(100./d, 1.2);
+          fragColor = vec4(vec3(d), 1.0);
         }
       `
 
@@ -74,7 +72,7 @@
     gl.bufferData(gl.ARRAY_BUFFER, positions, gl.STATIC_DRAW);
 
     const aPos = gl.getAttribLocation(program, 'a_position');
-    const t = gl.getUniformLocation(program, 't');
+    const t = gl.getUniformLocation(program, 'iTime');
 
     canvas.width = innerWidth;
     canvas.height = innerHeight;
@@ -84,13 +82,13 @@
     gl.useProgram(program);
     gl.enableVertexAttribArray(aPos);
     gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0);
-    
+
     function render(now) {
       gl.uniform1f(t, now / 1000);
       gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
       requestAnimationFrame(render);
     }
-    (render)(0);
+    render(0);
   </script>
 </body>
 
