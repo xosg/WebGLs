@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>spiral</title>
+  <title>scan-line</title>
   <style>
     html,
     body {
@@ -43,13 +43,22 @@
         out vec4 fragColor;
 
         void main(){
-          float thickness = 11.0 + sin(iTime * 0.05) * 10.0;
-          vec2 uv = gl_FragCoord.xy / ${min.toFixed(1)} * 2.0 - vec2(${x}, ${y});
-          float l = log(length(uv)) * 150.;
-          float angle = atan(uv.y, uv.x) * ${180 / Math.PI};
-          float mixer = step(mod(angle + iTime + l, 30.0), thickness);
+            vec2 p = gl_FragCoord.xy / vec2(${innerWidth}, ${innerHeight});
+            p = 2.0 * p - 1.0;
 
-          fragColor = vec4(mixer, 0.0, 0.0, 1.0);
+            p *= abs(sin(p.x * 2.0 * iTime) * tan(iTime));
+            p /= sin(p.y / sin(iTime));
+            p *= sin(p.x * cos(iTime));
+            p /= tan(p + 2.0 * iTime);
+
+            float scanline1 = sin(10.0 * iTime + p.y * 11.0);
+            scanline1 = abs(scanline1);
+            
+            float scanline2 = sin(11.0 * iTime + p.x * 10.0);
+            scanline2 = abs(scanline2);
+            
+            fragColor = vec4(0.0, 0.0, 1., 1.0);
+            fragColor.y = scanline1 * 0.3 + scanline2 * 0.2;
         }
       `
 
@@ -85,7 +94,7 @@
     gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0);
 
     function render(now) {
-      gl.uniform1f(t, now / 1000 * -30);
+      gl.uniform1f(t, now / 1000 );
       gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
       requestAnimationFrame(render);
     }
