@@ -16,7 +16,7 @@
 
     let vs = `#version 300 es \n in vec4 p; void main(){gl_Position = p;}`
 
-    const l = Math.max(innerWidth, innerHeight).toFixed(1)
+    const l = ((innerWidth + innerHeight) / 2).toFixed(1)
     let fs =
       `#version 300 es
         precision highp float;
